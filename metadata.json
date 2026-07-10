@@ -1,0 +1,6 @@
+{
+  "name": "Badge Calendar Creator",
+  "description": "Crea e personalizza bellissimi badge di calendario giornalieri o settimanali con sticker e scritte, pronti da incorporare nel tuo sito web.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
