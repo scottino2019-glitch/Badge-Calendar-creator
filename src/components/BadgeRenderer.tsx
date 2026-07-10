@@ -207,9 +207,9 @@ export const BadgeRenderer: React.FC<BadgeRendererProps> = ({
           /* DAILY EVENT LAYOUT */
           <div className="flex flex-col gap-3">
             {/* BIG DATE DISPLAY */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center">
               <div 
-                className="flex flex-col items-center justify-center p-2 min-w-[70px] aspect-square shadow-sm text-center"
+                className="flex flex-col items-center justify-center p-2 min-w-[70px] aspect-square shadow-sm text-center mr-3"
                 style={getCardStyle()}
               >
                 <span className="text-[10px] uppercase font-bold tracking-widest opacity-75 leading-none mb-1">
@@ -235,21 +235,25 @@ export const BadgeRenderer: React.FC<BadgeRendererProps> = ({
                     {config.daily.tagText}
                   </span>
                 )}
-                <div className="flex items-center gap-1.5 text-xs opacity-80 font-medium">
-                  <Clock size={12} className="shrink-0" />
-                  <span className="truncate">{config.daily.time}</span>
+                <div className="flex items-center text-xs opacity-80 font-medium">
+                  <Clock size={12} className="shrink-0 mr-1.5" />
+                  <span>{config.daily.time}</span>
                 </div>
               </div>
             </div>
 
             {/* EVENT TITLE & DESCRIPTION CARD */}
-            <div className="p-4 flex-1 flex flex-col gap-1.5" style={getCardStyle()}>
-              <h3 className="font-bold text-base leading-snug tracking-tight text-left">
-                {config.daily.title || "Nuovo Evento"}
+            <div className="p-4 flex-1 flex flex-col gap-1.5 overflow-hidden" style={getCardStyle()}>
+              <h3 className="font-bold text-base leading-snug tracking-tight text-left" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {config.daily.title.length > 70 
+                  ? config.daily.title.substring(0, 67) + '...' 
+                  : config.daily.title || "Nuovo Evento"}
               </h3>
               {config.daily.description && (
-                <p className="text-xs opacity-75 line-clamp-3 leading-relaxed text-left">
-                  {config.daily.description}
+                <p className="text-xs opacity-75 leading-relaxed text-left" style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {config.daily.description.length > 160 
+                    ? config.daily.description.substring(0, 157) + '...' 
+                    : config.daily.description}
                 </p>
               )}
             </div>
@@ -258,8 +262,8 @@ export const BadgeRenderer: React.FC<BadgeRendererProps> = ({
           /* WEEKLY SCHEDULE LAYOUT */
           <div className="flex flex-col gap-2 h-full justify-start">
             {config.weekly.subtitle && (
-              <div className="text-[11px] font-bold opacity-75 mb-1 flex items-center gap-1.5">
-                <Calendar size={12} />
+              <div className="text-[11px] font-bold opacity-75 mb-1 flex items-center">
+                <Calendar size={12} className="mr-1.5 shrink-0" />
                 <span>{config.weekly.subtitle}</span>
               </div>
             )}
@@ -270,13 +274,13 @@ export const BadgeRenderer: React.FC<BadgeRendererProps> = ({
                 .map((day) => (
                   <div 
                     key={day.id}
-                    className="p-2.5 flex items-center justify-between gap-2.5 text-xs transition-all border border-transparent"
+                    className="p-2.5 flex items-center justify-between text-xs transition-all border border-transparent"
                     style={getCardStyle()}
                   >
                     {/* Day indicator */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center min-w-0 flex-1 mr-2">
                       <div 
-                        className="w-10 h-10 flex flex-col items-center justify-center rounded font-black text-center"
+                        className="w-10 h-10 flex flex-col items-center justify-center rounded font-black text-center mr-2.5 shrink-0"
                         style={{ 
                           backgroundColor: `${config.accentColor}15`, 
                           color: config.textColor,
@@ -287,13 +291,15 @@ export const BadgeRenderer: React.FC<BadgeRendererProps> = ({
                         <span className="text-sm leading-none mt-0.5 font-bold">{day.dateLabel}</span>
                       </div>
 
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-bold truncate text-sm leading-tight text-left">
-                          {day.title || "Nessun evento"}
+                      <div className="flex flex-col min-w-0 flex-1 text-left">
+                        <span className="font-bold truncate text-sm leading-tight">
+                          {day.title && day.title.length > 32 
+                            ? day.title.substring(0, 29) + '...' 
+                            : day.title || "Nessun evento"}
                         </span>
-                        <span className="text-[11px] opacity-75 flex items-center gap-1 mt-0.5">
-                          <Clock size={10} />
-                          {day.time}
+                        <span className="text-[11px] opacity-75 flex items-center mt-0.5">
+                          <Clock size={10} className="mr-1 shrink-0" />
+                          <span className="truncate">{day.time}</span>
                         </span>
                       </div>
                     </div>

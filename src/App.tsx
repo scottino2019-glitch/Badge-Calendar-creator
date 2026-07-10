@@ -8,6 +8,7 @@ import { BadgeConfig, StickerInstance, TextInstance, DaySchedule } from './types
 import { DEFAULT_CONFIG, THEMES, STICKER_SVGS, STICKER_EMOJIS, encodeConfig, decodeConfig } from './data';
 import { BadgeRenderer } from './components/BadgeRenderer';
 import { EmbedGenerator } from './components/EmbedGenerator';
+import html2canvas from 'html2canvas';
 import { 
   Plus, 
   Trash2, 
@@ -237,42 +238,198 @@ export default function App() {
     const element = document.getElementById('custom-badge-canvas');
     if (!element) return;
 
-    // We build a solid styled SVG with XML serialization, then draw onto a high-res canvas
-    const width = config.width;
-    const height = config.height;
-    
-    // Inline all relevant styles or make sure colors look correct in standalone Canvas
-    const canvas = document.createElement('canvas');
-    canvas.width = width * 2; // retina 2x scale
-    canvas.height = height * 2;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // Temporarily clear selection so the exported PNG doesn't contain the active editing outlines or "Elimina" bubbles
+    const previousSelection = selectedElement;
+    if (previousSelection) {
+      setSelectedElement(null);
+    }
 
-    ctx.scale(2, 2);
+    // Wait a brief moment for React to flush the DOM update without selected outlines
+    setTimeout(() => {
+      const updatedElement = document.getElementById('custom-badge-canvas');
+      if (!updatedElement) {
+        if (previousSelection) setSelectedElement(previousSelection);
+        return;
+      }
 
-    const svgString = new XMLSerializer().serializeToString(element);
-    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
-    
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      const pngUrl = canvas.toDataURL('image/png');
-      const downloadLink = document.createElement('a');
-      downloadLink.href = pngUrl;
-      downloadLink.download = `badge-calendario-${config.type}.png`;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = (err) => {
-      console.error("SVG drawing error:", err);
-      // Fallback: alert download failure due to SVG serialization limits
-      alert("Errore nell'esportazione PNG. Puoi comunque copiare il codice HTML o l'Iframe, che funzionano ovunque!");
-    };
-    img.src = url;
+      // Save original styles to restore later so the responsive preview isn't permanently broken
+      const originalWidth = updatedElement.style.width;
+      const originalHeight = updatedElement.style.height;
+      const originalMinWidth = updatedElement.style.minWidth;
+      const originalMinHeight = updatedElement.style.minHeight;
+      const originalMaxWidth = updatedElement.style.maxWidth;
+      const originalMaxHeight = updatedElement.style.maxHeight;
+      const originalFlexShrink = updatedElement.style.flexShrink;
+
+      // Force exact designed pixel dimensions for html2canvas so that text doesn't wrap or truncate
+      updatedElement.style.width = `${config.width}px`;
+      updatedElement.style.height = `${config.height}px`;
+      updatedElement.style.minWidth = `${config.width}px`;
+      updatedElement.style.minHeight = `${config.height}px`;
+      updatedElement.style.maxWidth = `${config.width}px`;
+      updatedElement.style.maxHeight = `${config.height}px`;
+      updatedElement.style.flexShrink = '0';
+
+      // Setup temporary overrides to prevent html2canvas oklab/oklch parser crashes
+      const originalGetComputedStyle = window.getComputedStyle;
+      const originalGetPropertyValue = CSSStyleDeclaration.prototype.getPropertyValue;
+      const originalStyleSheets = document.styleSheets;
+      const originalStyleSheetsDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'styleSheets') || 
+                                             Object.getOwnPropertyDescriptor(document, 'styleSheets');
+
+      // 1. Intercept window.getComputedStyle
+      window.getComputedStyle = function (elt, pseudoElt) {
+        const style = originalGetComputedStyle(elt, pseudoElt);
+        return new Proxy(style, {
+          get(target, prop) {
+            if (prop === 'getPropertyValue') {
+              return function(propertyName: string) {
+                const val = target.getPropertyValue(propertyName);
+                if (typeof val === 'string' && (val.includes('oklch') || val.includes('oklab'))) {
+                  return val.replace(/(oklch|oklab)\([^)]+\)/g, 'rgba(0,0,0,0)');
+                }
+                return val;
+              };
+            }
+            const val = target[prop as keyof CSSStyleDeclaration];
+            if (typeof val === 'string' && (val.includes('oklch') || val.includes('oklab'))) {
+              return val.replace(/(oklch|oklab)\([^)]+\)/g, 'rgba(0,0,0,0)');
+            }
+            if (typeof val === 'function') {
+              return val.bind(target);
+            }
+            return val;
+          }
+        });
+      };
+
+      // 2. Intercept CSSStyleDeclaration.prototype.getPropertyValue
+      CSSStyleDeclaration.prototype.getPropertyValue = function(propertyName: string) {
+        const val = originalGetPropertyValue.call(this, propertyName);
+        if (typeof val === 'string' && (val.includes('oklch') || val.includes('oklab'))) {
+          return val.replace(/(oklch|oklab)\([^)]+\)/g, 'rgba(0,0,0,0)');
+        }
+        return val;
+      };
+
+      // 3. Intercept document.styleSheets
+      let proxiedStyleSheets: any = null;
+      try {
+        const stylesheetProxies = Array.from(originalStyleSheets).map(sheet => {
+          return new Proxy(sheet, {
+            get(target, prop) {
+              if (prop === 'cssRules' || prop === 'rules') {
+                try {
+                  const rules = target.cssRules || target.rules;
+                  if (!rules) return rules;
+                  const filteredRules = Array.from(rules).filter(rule => {
+                    if (rule.cssText && (rule.cssText.includes('oklch') || rule.cssText.includes('oklab'))) {
+                      return false; // Skip rules with oklch/oklab to avoid crashes
+                    }
+                    return true;
+                  });
+                  return filteredRules;
+                } catch (e) {
+                  return [];
+                }
+              }
+              const val = target[prop as keyof CSSStyleSheet];
+              if (typeof val === 'function') {
+                return val.bind(target);
+              }
+              return val;
+            }
+          });
+        });
+
+        proxiedStyleSheets = new Proxy(originalStyleSheets, {
+          get(target, prop) {
+            if (prop === 'length') {
+              return stylesheetProxies.length;
+            }
+            const idx = Number(prop);
+            if (!isNaN(idx)) {
+              return stylesheetProxies[idx];
+            }
+            if (prop === 'item') {
+              return (index: number) => stylesheetProxies[index];
+            }
+            if (prop === Symbol.iterator) {
+              return function* () {
+                for (const proxy of stylesheetProxies) {
+                  yield proxy;
+                }
+              };
+            }
+            const val = target[prop as keyof StyleSheetList];
+            if (typeof val === 'function') {
+              return val.bind(target);
+            }
+            return val;
+          }
+        });
+
+        Object.defineProperty(document, 'styleSheets', {
+          get: () => proxiedStyleSheets,
+          configurable: true
+        });
+      } catch (e) {
+        console.warn("Could not patch document.styleSheets:", e);
+      }
+
+      // Restore function to be called in .finally() / catch / then
+      const restoreAll = () => {
+        window.getComputedStyle = originalGetComputedStyle;
+        CSSStyleDeclaration.prototype.getPropertyValue = originalGetPropertyValue;
+        try {
+          if (originalStyleSheetsDescriptor) {
+            Object.defineProperty(document, 'styleSheets', originalStyleSheetsDescriptor);
+          } else {
+            delete (document as any).styleSheets;
+          }
+        } catch (e) {
+          console.warn("Could not restore document.styleSheets:", e);
+        }
+
+        // Restore dimensions of the element so the live preview goes back to normal responsive mode
+        updatedElement.style.width = originalWidth;
+        updatedElement.style.height = originalHeight;
+        updatedElement.style.minWidth = originalMinWidth;
+        updatedElement.style.minHeight = originalMinHeight;
+        updatedElement.style.maxWidth = originalMaxWidth;
+        updatedElement.style.maxHeight = originalMaxHeight;
+        updatedElement.style.flexShrink = originalFlexShrink;
+      };
+
+      html2canvas(updatedElement, {
+        scale: 3, // High quality retina scale
+        backgroundColor: null, // Keep background transparent/original
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+      }).then((canvas) => {
+        restoreAll();
+        const pngUrl = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.href = pngUrl;
+        downloadLink.download = `badge-calendario-${config.type}.png`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        
+        // Restore previous selection
+        if (previousSelection) {
+          setSelectedElement(previousSelection);
+        }
+      }).catch((err) => {
+        restoreAll();
+        console.error("html2canvas drawing error:", err);
+        alert("Errore nell'esportazione PNG. Puoi comunque copiare il codice HTML o l'Iframe, che funzionano ovunque!");
+        if (previousSelection) {
+          setSelectedElement(previousSelection);
+        }
+      });
+    }, 80);
   };
 
   // Embed view rendering
